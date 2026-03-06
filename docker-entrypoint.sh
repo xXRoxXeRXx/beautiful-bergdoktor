@@ -1,4 +1,5 @@
 #!/bin/bash
+set -e
 
 # Default run mode
 RUN_MODE=${RUN_MODE:-"cron"}

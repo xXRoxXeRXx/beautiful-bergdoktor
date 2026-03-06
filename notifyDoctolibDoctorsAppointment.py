@@ -5,14 +5,11 @@ import urllib.parse
 import urllib.request
 import re
 
-# Enable verbose logging
-print(f"[{datetime.now()}] BergdoktorBot starting...")
 
-try:
-    UPCOMING_DAYS = int(os.getenv('UPCOMING_DAYS', '15'))
-except ValueError:
-    print(f"[{datetime.now()}] Invalid UPCOMING_DAYS value, using default: 15")
-    UPCOMING_DAYS = 15
+def log(message):
+    """Print a timestamped log message"""
+    print(f"[{datetime.now()}] {message}")
+
 
 TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN', '')
 TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID', '')
@@ -64,66 +61,57 @@ def get_doctor_configurations():
     
     return doctors
 
-# Get all doctor configurations
-DOCTORS = get_doctor_configurations()
-
-if not (TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID) or UPCOMING_DAYS > 15 or not DOCTORS:
-    print(f"[{datetime.now()}] Configuration error - missing required settings or no doctors configured")
-    exit()
-
-def check_doctor_availability(doctor):
+def check_doctor_availability(doctor, upcoming_days):
     """Check availability for a single doctor"""
     # Calculate fresh each call so it stays accurate in long-running containers
-    max_datetime_in_future = datetime.today() + timedelta(days=UPCOMING_DAYS)
+    max_datetime_in_future = datetime.today() + timedelta(days=upcoming_days)
     try:
-        urlParts = urllib.parse.urlparse(doctor['availabilities_url'])
-        query = dict(urllib.parse.parse_qsl(urlParts.query))
+        url_parts = urllib.parse.urlparse(doctor['availabilities_url'])
+        query = dict(urllib.parse.parse_qsl(url_parts.query))
         query.update({
-            'limit': UPCOMING_DAYS,
+            'limit': upcoming_days,
             'start_date': date.today(),
         })
-        newAvailabilitiesUrl = (urlParts
-                                    ._replace(query = urllib.parse.urlencode(query))
-                                    .geturl())
-        request = (urllib
-                        .request
-                        .Request(newAvailabilitiesUrl))
+        new_availabilities_url = (url_parts
+                                      ._replace(query=urllib.parse.urlencode(query))
+                                      .geturl())
+        request = urllib.request.Request(new_availabilities_url)
         request.add_header(
             'User-Agent',
             'Mozilla/5.0 (Macintosh; Intel Mac OS X 13_4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36'
         )
         response = (urllib.request
-                            .urlopen(request)
-                            .read()
-                            .decode('utf-8'))
+                        .urlopen(request, timeout=10)
+                        .read()
+                        .decode('utf-8'))
 
         availabilities = json.loads(response)
-        
-        slotsInNearFuture = availabilities['total']
-        slotInNearFutureExist = slotsInNearFuture > 0
-        
-        earlierSlotExists = False
-        if slotInNearFutureExist:
+
+        slots_in_near_future = availabilities['total']
+        slot_in_near_future_exist = slots_in_near_future > 0
+
+        earlier_slot_exists = False
+        if slot_in_near_future_exist:
             for day in availabilities['availabilities']:
                 if len(day['slots']) == 0:
                     continue
-                nextDatetimeIso8601 = day['date']
-                nextDatetime = (datetime.fromisoformat(nextDatetimeIso8601)
-                                        .replace(tzinfo = None))
-                if nextDatetime < max_datetime_in_future:
-                    earlierSlotExists = True
+                next_datetime_iso8601 = day['date']
+                next_datetime = (datetime.fromisoformat(next_datetime_iso8601)
+                                         .replace(tzinfo=None))
+                if next_datetime < max_datetime_in_future:
+                    earlier_slot_exists = True
                     break
-        
+
         return {
             'doctor': doctor,
-            'slots_total': slotsInNearFuture,
-            'slots_exist': slotInNearFutureExist,
-            'earlier_slots': earlierSlotExists,
+            'slots_total': slots_in_near_future,
+            'slots_exist': slot_in_near_future_exist,
+            'earlier_slots': earlier_slot_exists,
             'availabilities': availabilities,
             'success': True
         }
     except Exception as e:
-        print(f"[{datetime.now()}] Error checking {doctor['name']}: {e}")
+        log(f"Error checking {doctor['name']}: {e}")
         return {
             'doctor': doctor,
             'success': False,
@@ -147,29 +135,54 @@ def send_telegram_message(message):
         method='POST'
     )
 
-    print(f"[{datetime.now()}] Sending Telegram message: {message[:100]}...")
+    log(f"Sending Telegram message: {message[:100]}...")
     try:
-        urllib.request.urlopen(request)
-        print(f"[{datetime.now()}] Message sent successfully!")
+        urllib.request.urlopen(request, timeout=10)
+        log("Message sent successfully!")
         return True
     except Exception as e:
-        print(f"[{datetime.now()}] Error sending message: {e}")
+        log(f"Error sending message: {e}")
         return False
 
 
 def main():
     """Main execution logic"""
+    log("BergdoktorBot starting...")
+
+    # Parse and validate UPCOMING_DAYS
+    try:
+        upcoming_days = int(os.getenv('UPCOMING_DAYS', '15'))
+    except ValueError:
+        log("Invalid UPCOMING_DAYS value, using default: 15")
+        upcoming_days = 15
+
+    if upcoming_days < 1:
+        log("UPCOMING_DAYS must be at least 1, using default: 15")
+        upcoming_days = 15
+    elif upcoming_days > 15:
+        log("UPCOMING_DAYS exceeds maximum of 15, using default: 15")
+        upcoming_days = 15
+
+    # Validate required configuration
+    doctors = get_doctor_configurations()
+    if not (TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID):
+        log("Configuration error - TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID are required")
+        return
+    if not doctors:
+        log("Configuration error - no doctors configured (set DOCTOR_1_AVAILABILITIES_URL etc.)")
+        return
+
     # Check all doctors
-    print(f"[{datetime.now()}] Checking {len(DOCTORS)} doctor(s)...")
+    log(f"Checking {len(doctors)} doctor(s)...")
     results = []
-    for doctor in DOCTORS:
-        print(f"[{datetime.now()}] Checking {doctor['name']}...")
-        result = check_doctor_availability(doctor)
+    for doctor in doctors:
+        log(f"Checking {doctor['name']}...")
+        result = check_doctor_availability(doctor, upcoming_days)
         results.append(result)
         if result['success']:
-            print(f"[{datetime.now()}] {doctor['name']}: Found {result['slots_total']} slots")
+            log(f"{doctor['name']}: Found {result['slots_total']} slots")
         else:
-            print(f"[{datetime.now()}] {doctor['name']}: Error - {result['error']}")
+            log(f"{doctor['name']}: Error - {result['error']}")
 
     # Determine if notification is needed
     available_doctors = [r for r in results if r['success'] and r['slots_exist']]
@@ -178,10 +191,10 @@ def main():
     if not available_doctors and not is_hourly_notification_due:
         total_slots = sum(r['slots_total'] for r in results if r['success'])
         total_earlier = sum(1 for r in results if r['success'] and r['earlier_slots'])
-        print(f"[{datetime.now()}] No notification needed. Total slots: {total_slots}, Earlier slots: {total_earlier}, Hourly due: {is_hourly_notification_due}")
+        log(f"No notification needed. Total slots: {total_slots}, Earlier slots: {total_earlier}, Hourly due: {is_hourly_notification_due}")
         return
 
-    print(f"[{datetime.now()}] Preparing notification...")
+    log("Preparing notification...")
 
     # Build notification message
     message = '🏥 <b>Arzttermin-Update</b>\n\n'
@@ -196,7 +209,7 @@ def main():
 
             message += f'👨‍⚕️ <b>{doctor["name"]}</b>\n'
             if result['earlier_slots']:
-                message += f'   🔥 {slots} Termin{plural_suffix} in {UPCOMING_DAYS} Tagen!\n'
+                message += f'   🔥 {slots} Termin{plural_suffix} in {upcoming_days} Tagen!\n'
             else:
                 message += f'   📅 {slots} Termin{plural_suffix} verfügbar\n'
 

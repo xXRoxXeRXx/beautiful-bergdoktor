@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="page-header">
+    <h2>{{ '✏️ Arzt bearbeiten' if action == 'edit' else '➕ Arzt hinzufügen' }}</h2>
+    <p>{{ doctor.name if doctor else 'Neuen Doctolib-Arzt konfigurieren' }}</p>
+</div>
+
+<div class="card" style="max-width: 700px;">
+    <form method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+        <div class="form-group">
+            <label for="name">Name *</label>
+            <input type="text" id="name" name="name"
+                   value="{{ doctor.name if doctor else '' }}"
+                   placeholder="z.B. Sportsmed.berlin – Orthopädie" required>
+        </div>
+
+        <div class="form-group">
+            <label for="availabilities_url">Availabilities URL *</label>
+            <textarea id="availabilities_url" name="availabilities_url" required
+                      placeholder="https://www.doctolib.de/availabilities.json?...">{{ doctor.availabilities_url if doctor else '' }}</textarea>
+            <div class="form-hint">
+                Aus Browser DevTools → Network Tab → Nach <code>availabilities.json</code> filtern → URL kopieren
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label for="booking_url">Booking URL</label>
+            <textarea id="booking_url" name="booking_url"
+                      placeholder="https://www.doctolib.de/...">{{ doctor.booking_url if doctor else '' }}</textarea>
+            <div class="form-hint">Direkt-Link zum Buchungsformular auf Doctolib</div>
+        </div>
+
+        {% if action == 'edit' %}
+        <div class="form-group">
+            <label>Status</label>
+            <div class="toggle-wrap">
+                <input type="checkbox" id="active" name="active"
+                       {{ 'checked' if doctor.active else '' }}>
+                <label for="active" style="text-transform:none; letter-spacing:0; font-size:0.9rem; color:#f1f5f9;">
+                    Arzt aktiv (wird beim nächsten Check-Zyklus geprüft)
+                </label>
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">
+                {{ '💾 Speichern' if action == 'edit' else '➕ Hinzufügen' }}
+            </button>
+            <a href="{{ url_for('doctors') }}" class="btn btn-ghost">Abbrechen</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="page-header">
+    <h2>⚙️ Einstellungen</h2>
+    <p>Telegram & Bot-Konfiguration</p>
+</div>
+
+<div class="card" style="max-width: 600px;">
+    <form method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+        <h3 style="font-size:0.9rem; color:#64748b; text-transform:uppercase;
+                   letter-spacing:0.05em; margin-bottom:1.25rem; padding-bottom:0.75rem;
+                   border-bottom:1px solid #334155;">
+            📱 Telegram
+        </h3>
+
+        <div class="form-group">
+            <label for="telegram_bot_token">Bot Token *</label>
+            <input type="password" id="telegram_bot_token" name="telegram_bot_token"
+                   value=""
+                   placeholder="{{ '••••••• (gespeichert – leer lassen zum Beibehalten)' if settings.telegram_bot_token else '1234567890:ABCdef...' }}">
+            <div class="form-hint">Von @BotFather erstellt. Geheim halten! Leer lassen, um den gespeicherten Token zu behalten.</div>
+        </div>
+
+        <div class="form-group">
+            <label for="telegram_chat_id">Chat ID *</label>
+            <input type="text" id="telegram_chat_id" name="telegram_chat_id"
+                   value="{{ settings.telegram_chat_id | default('') }}"
+                   placeholder="-•••••••">
+            <div class="form-hint">Gruppen-Chat ID (negativ für Gruppen)</div>
+        </div>
+
+        <h3 style="font-size:0.9rem; color:#64748b; text-transform:uppercase;
+                   letter-spacing:0.05em; margin-bottom:1.25rem; margin-top:2rem;
+                   padding-bottom:0.75rem; border-bottom:1px solid #334155;">
+            🔧 Bot-Verhalten
+        </h3>
+
+        <div class="form-group">
+            <label for="upcoming_days">Tage vorausschauen</label>
+            <input type="number" id="upcoming_days" name="upcoming_days"
+                   value="{{ settings.upcoming_days | default('15') }}"
+                   min="1" max="365">
+            <div class="form-hint">Wie viele Tage in die Zukunft sollen als "frühzeitig" gelten? (API-Limit: 15 Tage für die Abfrage, Logik unbegrenzt)</div>
+        </div>
+
+        <div class="form-group">
+            <label for="interval_minutes">Check-Intervall (Minuten)</label>
+            <input type="number" id="interval_minutes" name="interval_minutes"
+                   value="{{ settings.interval_minutes | default('5') }}"
+                   min="1" max="60">
+            <div class="form-hint">Wird nach dem nächsten Durchlauf automatisch übernommen – kein Neustart nötig.</div>
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">💾 Einstellungen speichern</button>
+        </div>
+    </form>
+</div>
+{% endblock %}

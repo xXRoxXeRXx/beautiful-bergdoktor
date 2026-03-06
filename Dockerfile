@@ -4,21 +4,24 @@ FROM python:3.11-slim
 # Set working directory
 WORKDIR /app
 
-# Copy the Python script
+# Install Flask (only external dependency)
+RUN pip install --no-cache-dir flask
+
+# Copy all application files
+COPY checker.py .
+COPY database.py .
 COPY notifyDoctolibDoctorsAppointment.py .
+COPY entrypoint.py .
+COPY web/ ./web/
 
-# Create cron entry script
-COPY docker-entrypoint.sh /usr/local/bin/
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh
-
-# Make the script executable
-RUN chmod +x notifyDoctolibDoctorsAppointment.py
+# Create data directory
+RUN mkdir -p /data
 
 # Create a non-root user for security
-RUN useradd --create-home --shell /bin/bash app && chown -R app:app /app
+RUN useradd --create-home --shell /bin/bash app \
+    && chown -R app:app /app /data
 
-# Switch to root for cron setup
-USER root
+USER app
 
-# Use custom entrypoint
-ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
+# Single entrypoint for both bot loop and web interface
+CMD ["python", "entrypoint.py"]

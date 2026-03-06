@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="page-header">
+    <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+        <div>
+            <h2>📜 Logs</h2>
+            <p>Letzte {{ logs|length }} Ausführungen</p>
+        </div>
+        {% if logs %}
+        <form method="POST" action="{{ url_for('clear_logs') }}"
+              onsubmit="return confirm('Alle Logs wirklich löschen?')">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-danger btn-sm">🗑️ Logs leeren</button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card">
+    {% if logs %}
+    <table>
+        <thead>
+            <tr>
+                <th>Zeitstempel</th>
+                <th>Arzt</th>
+                <th>Slots</th>
+                <th>Status</th>
+                <th>Meldung</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for log in logs %}
+        <tr>
+            <td class="log-entry" style="white-space:nowrap;">{{ log.timestamp[:19] }}</td>
+            <td>{{ log.doctor_name }}</td>
+            <td>
+                {% if log.slots_found > 0 %}
+                <span class="badge badge-blue">{{ log.slots_found }}</span>
+                {% else %}
+                <span style="color:#64748b;">0</span>
+                {% endif %}
+            </td>
+            <td>
+                {% if log.status == 'success' %}
+                <span class="badge badge-green">✅ OK</span>
+                {% else %}
+                <span class="badge badge-red">❌ Fehler</span>
+                {% endif %}
+            </td>
+            <td style="color:#64748b; font-size:0.82rem; max-width:300px;
+                       overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                {{ log.message }}
+            </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div style="text-align:center; padding:3rem;">
+        <div style="font-size:3rem; margin-bottom:1rem;">📭</div>
+        <p style="color:#64748b;">Keine Logs vorhanden. Starte einen Test auf dem Dashboard!</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

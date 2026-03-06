@@ -4,5 +4,14 @@ services:
     container_name: bergdoktorbot
     env_file:
       - .env
-    
+    environment:
+      - DB_PATH=/data/bergdoktorbot.db
+    volumes:
+      - bot_data:/data
+    ports:
+      # M-5: bind only to localhost; put a TLS-terminating reverse proxy in front for external access
+      - "127.0.0.1:${WEB_PORT:-8080}:8080"
     restart: unless-stopped
+
+volumes:
+  bot_data:

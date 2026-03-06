@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <title>BergdoktorBot – {{ title | default('Dashboard') }}</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #0f172a; color: #f1f5f9; min-height: 100vh;
+            display: flex;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: 240px; min-height: 100vh;
+            background: #1e293b; border-right: 1px solid #334155;
+            padding: 1.5rem 0; flex-shrink: 0;
+            display: flex; flex-direction: column;
+        }
+        .sidebar-logo { padding: 0 1.5rem 1.5rem; border-bottom: 1px solid #334155; }
+        .sidebar-logo .icon { font-size: 1.8rem; }
+        .sidebar-logo h1 { font-size: 0.95rem; color: #94a3b8; margin-top: 0.25rem; }
+        nav { padding: 1rem 0; flex: 1; }
+        nav a {
+            display: flex; align-items: center; gap: 0.75rem;
+            padding: 0.65rem 1.5rem; color: #94a3b8; text-decoration: none;
+            font-size: 0.9rem; transition: all 0.15s; border-left: 3px solid transparent;
+        }
+        nav a:hover, nav a.active {
+            color: #f1f5f9; background: #0f172a; border-left-color: #3b82f6;
+        }
+        .sidebar-footer { padding: 1rem 1.5rem; border-top: 1px solid #334155; }
+        .sidebar-footer a {
+            color: #64748b; text-decoration: none; font-size: 0.85rem;
+        }
+        .sidebar-footer a:hover { color: #f1f5f9; }
+
+        /* Main */
+        .main { flex: 1; padding: 2rem; overflow-y: auto; }
+        .page-header { margin-bottom: 2rem; }
+        .page-header h2 { font-size: 1.5rem; font-weight: 700; }
+        .page-header p { color: #64748b; margin-top: 0.25rem; font-size: 0.9rem; }
+
+        /* Cards */
+        .card {
+            background: #1e293b; border: 1px solid #334155;
+            border-radius: 10px; padding: 1.5rem;
+        }
+        .card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+        .stat-card { background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 1.25rem; }
+        .stat-card .stat-label { color: #64748b; font-size: 0.8rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+        .stat-card .stat-value { font-size: 2rem; font-weight: 700; margin-top: 0.25rem; }
+
+        /* Table */
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; padding: 0.65rem 1rem; color: #64748b;
+             font-size: 0.75rem; font-weight: 600; text-transform: uppercase;
+             letter-spacing: 0.05em; border-bottom: 1px solid #334155; }
+        td { padding: 0.75rem 1rem; border-bottom: 1px solid #1e293b;
+             font-size: 0.9rem; vertical-align: middle; }
+        tr:last-child td { border-bottom: none; }
+        tr:hover td { background: #0f172a22; }
+
+        /* Badges */
+        .badge {
+            display: inline-flex; align-items: center; gap: 0.3rem;
+            padding: 0.2rem 0.6rem; border-radius: 20px;
+            font-size: 0.75rem; font-weight: 600;
+        }
+        .badge-green { background: #052e16; color: #4ade80; }
+        .badge-red   { background: #450a0a; color: #f87171; }
+        .badge-gray  { background: #1e293b; color: #64748b; border: 1px solid #334155; }
+        .badge-blue  { background: #0c1a3a; color: #60a5fa; }
+
+        /* Buttons */
+        .btn {
+            display: inline-flex; align-items: center; gap: 0.4rem;
+            padding: 0.5rem 1rem; border-radius: 7px;
+            font-size: 0.85rem; font-weight: 600; cursor: pointer;
+            text-decoration: none; border: none; transition: all 0.15s;
+        }
+        .btn-primary { background: #3b82f6; color: white; }
+        .btn-primary:hover { background: #2563eb; }
+        .btn-success { background: #16a34a; color: white; }
+        .btn-success:hover { background: #15803d; }
+        .btn-danger  { background: #dc2626; color: white; }
+        .btn-danger:hover  { background: #b91c1c; }
+        .btn-ghost { background: transparent; color: #94a3b8; border: 1px solid #334155; }
+        .btn-ghost:hover { color: #f1f5f9; border-color: #64748b; }
+        .btn-sm { padding: 0.35rem 0.7rem; font-size: 0.8rem; }
+
+        /* Alerts */
+        .alert { padding: 0.75rem 1rem; border-radius: 8px; margin-bottom: 1.25rem; font-size: 0.9rem; }
+        .alert-success { background: #052e16; border: 1px solid #166534; color: #4ade80; }
+        .alert-error   { background: #450a0a; border: 1px solid #991b1b; color: #fca5a5; }
+
+        /* Forms */
+        .form-group { margin-bottom: 1.25rem; }
+        .form-group label { display: block; color: #94a3b8; font-size: 0.8rem;
+            font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.4rem; }
+        .form-group input, .form-group select, .form-group textarea {
+            width: 100%; padding: 0.7rem 1rem;
+            background: #0f172a; border: 1px solid #334155; border-radius: 8px;
+            color: #f1f5f9; font-size: 0.9rem; transition: border-color 0.2s;
+            font-family: inherit;
+        }
+        .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+            outline: none; border-color: #3b82f6;
+        }
+        .form-group textarea { resize: vertical; min-height: 80px; }
+        .form-hint { color: #64748b; font-size: 0.78rem; margin-top: 0.3rem; }
+        .form-actions { display: flex; gap: 0.75rem; margin-top: 1.5rem; }
+        .toggle-wrap { display: flex; align-items: center; gap: 0.75rem; }
+        .toggle-wrap input[type=checkbox] { width: 1rem; height: 1rem; accent-color: #3b82f6; }
+
+        /* Result box */
+        #test-result { display: none; margin-top: 1rem; }
+        .log-entry { font-family: 'Courier New', monospace; font-size: 0.82rem; }
+    </style>
+</head>
+<body>
+<div class="sidebar">
+    <div class="sidebar-logo">
+        <div class="icon">🏥</div>
+        <h1>BergdoktorBot</h1>
+    </div>
+    <nav>
+        <a href="{{ url_for('dashboard') }}" class="{{ 'active' if request.endpoint == 'dashboard' }}">📊 Dashboard</a>
+        <a href="{{ url_for('doctors') }}" class="{{ 'active' if request.endpoint in ['doctors','add_doctor','edit_doctor'] }}">👨‍⚕️ Ärzte</a>
+        <a href="{{ url_for('logs') }}" class="{{ 'active' if request.endpoint == 'logs' }}">📜 Logs</a>
+        <a href="{{ url_for('settings') }}" class="{{ 'active' if request.endpoint == 'settings' }}">⚙️ Einstellungen</a>
+    </nav>
+    <div class="sidebar-footer">
+        <a href="{{ url_for('logout') }}">🚪 Abmelden</a>
+    </div>
+</div>
+
+<div class="main">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for category, message in messages %}
+    <div class="alert alert-{{ 'success' if category == 'success' else 'error' }}">
+        {{ '✅' if category == 'success' else '⚠️' }} {{ message }}
+    </div>
+    {% endfor %}
+    {% endwith %}
+
+    {% block content %}{% endblock %}
+</div>
+</body>
+</html>

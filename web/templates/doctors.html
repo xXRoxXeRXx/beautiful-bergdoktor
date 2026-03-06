@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="page-header">
+    <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+        <div>
+            <h2>👨‍⚕️ Ärzte</h2>
+            <p>Doctolib-Quellen verwalten</p>
+        </div>
+        <a href="{{ url_for('add_doctor') }}" class="btn btn-primary">➕ Arzt hinzufügen</a>
+    </div>
+</div>
+
+{% if doctors %}
+<div class="card">
+    <table>
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Status</th>
+                <th>Booking URL</th>
+                <th style="text-align:right;">Aktionen</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for doctor in doctors %}
+        <tr>
+            <td><strong>{{ doctor.name }}</strong></td>
+            <td>
+                {% if doctor.active %}
+                <span class="badge badge-green">● Aktiv</span>
+                {% else %}
+                <span class="badge badge-gray">○ Inaktiv</span>
+                {% endif %}
+            </td>
+            <td style="max-width:250px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                <a href="{{ doctor.booking_url }}" target="_blank" style="color:#60a5fa; font-size:0.82rem;">
+                    {{ doctor.booking_url[:60] }}{% if doctor.booking_url|length > 60 %}…{% endif %}
+                </a>
+            </td>
+            <td style="text-align:right;">
+                <div style="display:flex; gap:0.5rem; justify-content:flex-end;">
+                    <button class="btn btn-ghost btn-sm" onclick="testDoctor({{ doctor.id }}, this)">🧪 Test</button>
+                    <a href="{{ url_for('edit_doctor', doctor_id=doctor.id) }}" class="btn btn-ghost btn-sm">✏️ Edit</a>
+                    <form method="POST" action="{{ url_for('delete_doctor', doctor_id=doctor.id) }}"
+                          onsubmit="return confirm('Arzt &quot;{{ doctor.name }}&quot; wirklich löschen?')">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn btn-danger btn-sm">🗑️</button>
+                    </form>
+                </div>
+                <div id="result-{{ doctor.id }}" style="margin-top:0.5rem; font-size:0.82rem; text-align:right; display:none;"></div>
+            </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="card" style="text-align:center; padding:3rem;">
+    <div style="font-size:3rem; margin-bottom:1rem;">👨‍⚕️</div>
+    <h3 style="color:#94a3b8; margin-bottom:0.5rem;">Noch keine Ärzte konfiguriert</h3>
+    <p style="color:#64748b; margin-bottom:1.5rem; font-size:0.9rem;">Füge deinen ersten Doctolib-Arzt hinzu</p>
+    <a href="{{ url_for('add_doctor') }}" class="btn btn-primary">➕ Arzt hinzufügen</a>
+</div>
+{% endif %}
+
+<script>
+async function testDoctor(id, btn) {
+    const resultDiv = document.getElementById('result-' + id);
+    const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+    btn.disabled = true;
+    btn.textContent = '⏳';
+    resultDiv.style.display = 'none';
+
+    try {
+        const res = await fetch(`/doctors/${id}/test`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: `csrf_token=${encodeURIComponent(csrfToken)}`,
+        });
+        const data = await res.json();
+        if (data.success) {
+            const slots = data.slots_total;
+            const earlier = data.earlier_slots;
+            resultDiv.innerHTML = slots > 0
+                ? `<span class="badge badge-green">${slots} Slot(s)${earlier ? ' 🔥 Früh!' : ''}</span>`
+                : `<span class="badge badge-gray">0 Slots</span>`;
+        } else {
+            resultDiv.innerHTML = `<span class="badge badge-red">❌ ${data.error}</span>`;
+        }
+        resultDiv.style.display = 'block';
+    } catch(e) {
+        resultDiv.innerHTML = `<span class="badge badge-red">❌ Netzwerkfehler</span>`;
+        resultDiv.style.display = 'block';
+    } finally {
+        btn.disabled = false;
+        btn.textContent = '🧪 Test';
+    }
+}
+</script>
+{% endblock %}

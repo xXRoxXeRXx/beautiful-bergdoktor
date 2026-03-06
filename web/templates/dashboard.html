@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="page-header">
+    <h2>📊 Dashboard</h2>
+    <p>Übersicht und Schnelltest</p>
+</div>
+
+<div class="card-grid">
+    <div class="stat-card">
+        <div class="stat-label">Aktive Ärzte</div>
+        <div class="stat-value">{{ doctors | selectattr('active', 'equalto', 1) | list | length }}</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">Gesamt Ärzte</div>
+        <div class="stat-value">{{ doctors | length }}</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">Upcoming Days</div>
+        <div class="stat-value">{{ settings.upcoming_days | default('15') }}</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">Interval</div>
+        <div class="stat-value" style="font-size:1.4rem">{{ settings.interval_minutes | default('5') }} min</div>
+    </div>
+</div>
+
+<!-- Quick Test -->
+<div class="card" style="margin-bottom: 1.5rem;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+        <div>
+            <h3 style="font-size:1rem;">🧪 Schnelltest</h3>
+            <p style="color:#64748b; font-size:0.85rem; margin-top:0.2rem;">Alle aktiven Ärzte prüfen + Telegram-Nachricht senden (wenn Slots gefunden)</p>
+        </div>
+        <button class="btn btn-success" onclick="runTest()" id="test-btn">▶ Test starten</button>
+    </div>
+    <div id="test-result">
+        <table>
+            <thead><tr><th>Arzt</th><th>Slots</th><th>Frühester Termin</th><th>Status</th></tr></thead>
+            <tbody id="test-tbody"></tbody>
+        </table>
+        <div id="tg-status" style="margin-top:0.75rem; font-size:0.88rem;"></div>
+    </div>
+</div>
+
+<!-- Recent Logs -->
+<div class="card">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+        <h3 style="font-size:1rem;">📜 Letzte Ausführungen</h3>
+        <a href="{{ url_for('logs') }}" class="btn btn-ghost btn-sm">Alle anzeigen →</a>
+    </div>
+    {% if logs %}
+    <table>
+        <thead><tr><th>Zeit</th><th>Arzt</th><th>Slots</th><th>Status</th></tr></thead>
+        <tbody>
+        {% for log in logs %}
+        <tr>
+            <td class="log-entry">{{ log.timestamp[:19] }}</td>
+            <td>{{ log.doctor_name }}</td>
+            <td>{{ log.slots_found }}</td>
+            <td>
+                {% if log.status == 'success' %}
+                <span class="badge badge-green">✅ OK</span>
+                {% else %}
+                <span class="badge badge-red">❌ Fehler</span>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="color:#64748b; font-size:0.9rem;">Noch keine Logs vorhanden. Starte einen Test!</p>
+    {% endif %}
+</div>
+
+<script>
+async function runTest() {
+    const btn = document.getElementById('test-btn');
+    const result = document.getElementById('test-result');
+    const tbody = document.getElementById('test-tbody');
+    const tgStatus = document.getElementById('tg-status');
+    const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+    btn.disabled = true;
+    btn.textContent = '⏳ Prüfe...';
+    tgStatus.innerHTML = '';
+
+    try {
+        const res = await fetch('/run-test', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: `csrf_token=${encodeURIComponent(csrfToken)}`,
+        });
+        const data = await res.json();
+        tbody.innerHTML = '';
+        data.results.forEach(r => {
+            const row = `<tr>
+                <td>${r.name}</td>
+                <td>${r.success ? r.slots : '–'}</td>
+                <td>${r.success && r.earlier_slots ? '<span class="badge badge-green">🔥 Ja!</span>' : '<span class="badge badge-gray">Nein</span>'}</td>
+                <td>${r.success ? '<span class="badge badge-green">✅ OK</span>' : '<span class="badge badge-red">❌ ' + r.error + '</span>'}</td>
+            </tr>`;
+            tbody.innerHTML += row;
+        });
+
+        // Telegram status
+        if (data.telegram_sent) {
+            tgStatus.innerHTML = '<span class="badge badge-green">📨 Telegram-Nachricht gesendet!</span>';
+        } else {
+            const reason = data.telegram_error || 'Keine Slots gefunden';
+            tgStatus.innerHTML = `<span class="badge badge-gray">📭 Kein Telegram: ${reason}</span>`;
+        }
+
+        result.style.display = 'block';
+    } catch(e) {
+        alert('Fehler: ' + e);
+    } finally {
+        btn.disabled = false;
+        btn.textContent = '▶ Test starten';
+    }
+}
+</script>
+{% endblock %}

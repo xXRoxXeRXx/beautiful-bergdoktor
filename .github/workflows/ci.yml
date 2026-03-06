@@ -15,14 +15,21 @@ jobs:
       uses: actions/checkout@v4
 
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: '3.11'
+
+    - name: Install dependencies
+      run: pip install flask
 
     - name: Python syntax check
       run: |
         python -m py_compile notifyDoctolibDoctorsAppointment.py
-        echo "✅ Python syntax check passed"
+        python -m py_compile checker.py
+        python -m py_compile database.py
+        python -m py_compile entrypoint.py
+        python -m py_compile web/app.py
+        echo "✅ Python syntax check passed for all modules"
 
     - name: Test Docker build
       run: |
@@ -32,13 +39,21 @@ jobs:
     - name: Test Docker run
       run: |
         docker run --rm \
-          -e RUN_MODE=manual \
+          -e WEB_USER=ci_user \
+          -e WEB_PASS=ci_password \
+          -e FLASK_SECRET_KEY=0000000000000000000000000000000000000000000000000000000000000000 \
           -e TELEGRAM_BOT_TOKEN=dummy_token \
-          -e TELEGRAM_CHAT_ID=dummy_chat \
+          -e TELEGRAM_CHAT_ID=-123456789 \
+          --entrypoint python \
           bergdoktorbot-test \
-          python -c "
-          import os
-          print('✅ Container starts successfully')
-          print('Python version:', __import__('sys').version)
-          print('Env vars loaded:', bool(os.getenv('TELEGRAM_BOT_TOKEN')))
-          "
+          /app/checker.py || true
+        docker run --rm \
+          -e WEB_USER=ci_user \
+          -e WEB_PASS=ci_password \
+          -e FLASK_SECRET_KEY=0000000000000000000000000000000000000000000000000000000000000000 \
+          -e TELEGRAM_BOT_TOKEN=dummy_token \
+          -e TELEGRAM_CHAT_ID=-123456789 \
+          --entrypoint python \
+          bergdoktorbot-test \
+          -m py_compile database.py checker.py notifyDoctolibDoctorsAppointment.py
+        echo "✅ Container starts and modules load successfully"

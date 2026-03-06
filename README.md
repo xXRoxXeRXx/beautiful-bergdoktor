@@ -8,7 +8,7 @@
 
 Monitor multiple [Doctolib.de](https://www.doctolib.de/) doctors for appointment availability and get instant **Telegram notifications** — managed via a built-in **web dashboard**.
 
-> **Based on** [Der BergdoktorBot](https://github.com/MarcelWMeyer/der-bergdoktorbot-a-doctolib-doctors-appointment-telegram-notifier) by [@MarcelWMeyer](https://github.com/MarcelWMeyer).  
+> **Based on** [Der BergdoktorBot](https://github.com/mayrs/der-bergdoktorbot-a-doctolib-doctors-appointment-telegram-notifier) by [@mayrs](https://github.com/mayrs).  
 > This fork adds a hardened security layer (CSRF protection, SSRF prevention, rate limiting, secret management) and improved error diagnostics on top of the original bot architecture.
 
 ---
@@ -214,8 +214,8 @@ This project has been security-audited and hardened against:
 
 **Beautiful Bergdoktor** is a hardened fork of **Der BergdoktorBot**:
 
-- 🔗 **Original project:** [MarcelWMeyer/der-bergdoktorbot-a-doctolib-doctors-appointment-telegram-notifier](https://github.com/MarcelWMeyer/der-bergdoktorbot-a-doctolib-doctors-appointment-telegram-notifier)
-- 👤 **Original author:** [@MarcelWMeyer](https://github.com/MarcelWMeyer)
+- 🔗 **Original project:** [mayrs/der-bergdoktorbot-a-doctolib-doctors-appointment-telegram-notifier](https://github.com/mayrs/der-bergdoktorbot-a-doctolib-doctors-appointment-telegram-notifier)
+- 👤 **Original author:** [@mayrs](https://github.com/mayrs)
 - 📄 **License:** MIT — see [LICENSE.md](LICENSE.md)
 
 ---

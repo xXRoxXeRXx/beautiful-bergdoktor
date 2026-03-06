@@ -8,10 +8,14 @@ import re
 # Enable verbose logging
 print(f"[{datetime.now()}] BergdoktorBot starting...")
 
+try:
+    UPCOMING_DAYS = int(os.getenv('UPCOMING_DAYS', '15'))
+except ValueError:
+    print(f"[{datetime.now()}] Invalid UPCOMING_DAYS value, using default: 15")
+    UPCOMING_DAYS = 15
+
 TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN', '')
 TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID', '')
-UPCOMING_DAYS = int(os.getenv('UPCOMING_DAYS', '15'))
-MAX_DATETIME_IN_FUTURE = datetime.today() + timedelta(days = UPCOMING_DAYS)
 NOTIFY_HOURLY = os.getenv('NOTIFY_HOURLY', 'false').lower() == 'true'
 
 # Legacy support for single doctor configuration
@@ -69,6 +73,8 @@ if not (TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID) or UPCOMING_DAYS > 15 or not DO
 
 def check_doctor_availability(doctor):
     """Check availability for a single doctor"""
+    # Calculate fresh each call so it stays accurate in long-running containers
+    max_datetime_in_future = datetime.today() + timedelta(days=UPCOMING_DAYS)
     try:
         urlParts = urllib.parse.urlparse(doctor['availabilities_url'])
         query = dict(urllib.parse.parse_qsl(urlParts.query))
@@ -104,7 +110,7 @@ def check_doctor_availability(doctor):
                 nextDatetimeIso8601 = day['date']
                 nextDatetime = (datetime.fromisoformat(nextDatetimeIso8601)
                                         .replace(tzinfo = None))
-                if nextDatetime < MAX_DATETIME_IN_FUTURE:
+                if nextDatetime < max_datetime_in_future:
                     earlierSlotExists = True
                     break
         
@@ -125,86 +131,99 @@ def check_doctor_availability(doctor):
         }
 
 def send_telegram_message(message):
-    """Send a message via Telegram"""
-    urlEncodedMessage = urllib.parse.quote(message)
-    telegram_url = (f'https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage'
-                    f'?chat_id={TELEGRAM_CHAT_ID}'
-                    f'&text={urlEncodedMessage}'
-                    f'&parse_mode=HTML'
-                    f'&disable_web_page_preview=true')
+    """Send a message via Telegram using POST to avoid token in URL logs"""
+    payload = json.dumps({
+        'chat_id': TELEGRAM_CHAT_ID,
+        'text': message,
+        'parse_mode': 'HTML',
+        'disable_web_page_preview': True,
+    }).encode('utf-8')
+
+    telegram_url = f'https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage'
+    request = urllib.request.Request(
+        telegram_url,
+        data=payload,
+        headers={'Content-Type': 'application/json'},
+        method='POST'
+    )
 
     print(f"[{datetime.now()}] Sending Telegram message: {message[:100]}...")
     try:
-        response = urllib.request.urlopen(telegram_url)
+        urllib.request.urlopen(request)
         print(f"[{datetime.now()}] Message sent successfully!")
         return True
     except Exception as e:
         print(f"[{datetime.now()}] Error sending message: {e}")
         return False
 
-# Check all doctors
-print(f"[{datetime.now()}] Checking {len(DOCTORS)} doctor(s)...")
-results = []
-for doctor in DOCTORS:
-    print(f"[{datetime.now()}] Checking {doctor['name']}...")
-    result = check_doctor_availability(doctor)
-    results.append(result)
-    if result['success']:
-        print(f"[{datetime.now()}] {doctor['name']}: Found {result['slots_total']} slots")
-    else:
-        print(f"[{datetime.now()}] {doctor['name']}: Error - {result['error']}")
 
-# Determine if notification is needed
-available_doctors = [r for r in results if r['success'] and (r['earlier_slots'] or r['slots_exist'])]
-isOnTheHour = datetime.now().minute == 0
-isHourlyNotificationDue = isOnTheHour and NOTIFY_HOURLY
-
-if not available_doctors and not isHourlyNotificationDue:
-    total_slots = sum(r['slots_total'] for r in results if r['success'])
-    total_earlier = sum(1 for r in results if r['success'] and r['earlier_slots'])
-    print(f"[{datetime.now()}] No notification needed. Total slots: {total_slots}, Earlier slots: {total_earlier}, Hourly due: {isHourlyNotificationDue}")
-    exit()
-
-print(f"[{datetime.now()}] Preparing notification...")
-
-# Build notification message
-message = '🏥 <b>Arzttermin-Update</b>\n\n'
-
-# Add available appointments
-if available_doctors:
-    message += '� <b>Verfügbare Termine:</b>\n'
-    for result in available_doctors:
-        doctor = result['doctor']
-        slots = result['slots_total']
-        pluralSuffix = 'e' if slots > 1 else ''
-        
-        message += f'�‍⚕️ <b>{doctor["name"]}</b>\n'
-        if result['earlier_slots']:
-            message += f'   🔥 {slots} Termin{pluralSuffix} in {UPCOMING_DAYS} Tagen!\n'
+def main():
+    """Main execution logic"""
+    # Check all doctors
+    print(f"[{datetime.now()}] Checking {len(DOCTORS)} doctor(s)...")
+    results = []
+    for doctor in DOCTORS:
+        print(f"[{datetime.now()}] Checking {doctor['name']}...")
+        result = check_doctor_availability(doctor)
+        results.append(result)
+        if result['success']:
+            print(f"[{datetime.now()}] {doctor['name']}: Found {result['slots_total']} slots")
         else:
-            message += f'   📅 {slots} Termin{pluralSuffix} verfügbar\n'
-        
-        message += f'   📞 <a href="{doctor["booking_url"]}">Jetzt buchen</a>\n'
-        if doctor['move_booking_url']:
-            message += f'   🚚 <a href="{doctor["move_booking_url"]}">Termin verschieben</a>\n'
-        message += '\n'
+            print(f"[{datetime.now()}] {doctor['name']}: Error - {result['error']}")
 
-# Add hourly notifications for doctors without immediate slots
-if isHourlyNotificationDue:
-    hourly_doctors = [r for r in results if r['success'] and not r['earlier_slots'] and r['slots_exist']]
-    if hourly_doctors:
-        message += '🐌 <b>Spätere Termine:</b>\n'
-        for result in hourly_doctors:
+    # Determine if notification is needed
+    available_doctors = [r for r in results if r['success'] and r['slots_exist']]
+    is_hourly_notification_due = datetime.now().minute == 0 and NOTIFY_HOURLY
+
+    if not available_doctors and not is_hourly_notification_due:
+        total_slots = sum(r['slots_total'] for r in results if r['success'])
+        total_earlier = sum(1 for r in results if r['success'] and r['earlier_slots'])
+        print(f"[{datetime.now()}] No notification needed. Total slots: {total_slots}, Earlier slots: {total_earlier}, Hourly due: {is_hourly_notification_due}")
+        return
+
+    print(f"[{datetime.now()}] Preparing notification...")
+
+    # Build notification message
+    message = '🏥 <b>Arzttermin-Update</b>\n\n'
+
+    # Add available appointments
+    if available_doctors:
+        message += '🔥 <b>Verfügbare Termine:</b>\n'
+        for result in available_doctors:
             doctor = result['doctor']
-            try:
-                nextSlotDatetimeIso8601 = result['availabilities']['next_slot']
-                nextSlotDate = (datetime.fromisoformat(nextSlotDatetimeIso8601)
-                                            .strftime('%d %B %Y'))
-                message += f'�‍⚕️ {doctor["name"]}: <i>{nextSlotDate}</i>\n'
-            except:
-                message += f'👨‍⚕️ {doctor["name"]}: Termine verfügbar\n'
+            slots = result['slots_total']
+            plural_suffix = 'e' if slots > 1 else ''
 
-message += '\n💊 Der BergdoktorBot'
+            message += f'👨‍⚕️ <b>{doctor["name"]}</b>\n'
+            if result['earlier_slots']:
+                message += f'   🔥 {slots} Termin{plural_suffix} in {UPCOMING_DAYS} Tagen!\n'
+            else:
+                message += f'   📅 {slots} Termin{plural_suffix} verfügbar\n'
 
-# Send the notification
-send_telegram_message(message)
+            message += f'   📞 <a href="{doctor["booking_url"]}">Jetzt buchen</a>\n'
+            if doctor['move_booking_url']:
+                message += f'   🚚 <a href="{doctor["move_booking_url"]}">Termin verschieben</a>\n'
+            message += '\n'
+
+    # Add hourly notifications for doctors without earlier slots
+    if is_hourly_notification_due:
+        hourly_doctors = [r for r in results if r['success'] and not r['earlier_slots'] and r['slots_exist']]
+        if hourly_doctors:
+            message += '🐌 <b>Spätere Termine:</b>\n'
+            for result in hourly_doctors:
+                doctor = result['doctor']
+                try:
+                    next_slot_iso = result['availabilities']['next_slot']
+                    next_slot_date = datetime.fromisoformat(next_slot_iso).strftime('%d %B %Y')
+                    message += f'👨‍⚕️ {doctor["name"]}: <i>{next_slot_date}</i>\n'
+                except Exception:
+                    message += f'👨‍⚕️ {doctor["name"]}: Termine verfügbar\n'
+
+    message += '\n💊 Der BergdoktorBot'
+
+    # Send the notification
+    send_telegram_message(message)
+
+
+if __name__ == '__main__':
+    main()

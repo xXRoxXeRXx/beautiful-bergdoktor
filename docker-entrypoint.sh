@@ -5,7 +5,7 @@ RUN_MODE=${RUN_MODE:-"cron"}
 
 if [ "$RUN_MODE" = "manual" ]; then
     echo "Running in manual mode - executing script once..."
-    cd /app && /usr/local/bin/python notifyDoctolibDoctorsAppointment.py
+    exec /usr/local/bin/python notifyDoctolibDoctorsAppointment.py
 else
     echo "Running in scheduled mode - will execute every 5 minutes..."
     
@@ -19,7 +19,7 @@ else
     while true; do
         echo "[$(date)] Starting BergdoktorBot execution..."
         
-        # Execute the Python script
+        # Use exec-style run so signals propagate correctly
         /usr/local/bin/python notifyDoctolibDoctorsAppointment.py
         
         echo "[$(date)] Execution completed. Sleeping for $INTERVAL_MINUTES minutes..."

@@ -69,7 +69,7 @@ def check_doctor_availability(doctor, upcoming_days):
         url_parts = urllib.parse.urlparse(doctor['availabilities_url'])
         query = dict(urllib.parse.parse_qsl(url_parts.query))
         query.update({
-            'limit': upcoming_days,
+            'limit': min(upcoming_days, 15),  # Doctolib API maximum is 15
             'start_date': date.today(),
         })
         new_availabilities_url = (url_parts

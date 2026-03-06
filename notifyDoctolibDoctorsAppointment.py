@@ -152,15 +152,11 @@ def main():
     # Parse and validate UPCOMING_DAYS
     try:
         upcoming_days = int(os.getenv('UPCOMING_DAYS', '15'))
+        if upcoming_days < 1:
+            log("UPCOMING_DAYS must be at least 1, using default: 15")
+            upcoming_days = 15
     except ValueError:
         log("Invalid UPCOMING_DAYS value, using default: 15")
-        upcoming_days = 15
-
-    if upcoming_days < 1:
-        log("UPCOMING_DAYS must be at least 1, using default: 15")
-        upcoming_days = 15
-    elif upcoming_days > 15:
-        log("UPCOMING_DAYS exceeds maximum of 15, using default: 15")
         upcoming_days = 15
 
     # Validate required configuration

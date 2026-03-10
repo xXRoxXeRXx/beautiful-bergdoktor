@@ -40,6 +40,7 @@ def init_db():
             availabilities_url TEXT    NOT NULL,
             booking_url        TEXT    NOT NULL DEFAULT 'https://www.doctolib.de/',
             move_booking_url   TEXT,
+            upcoming_days      INTEGER NOT NULL DEFAULT 15,
             active             INTEGER NOT NULL DEFAULT 1,
             created_at         TEXT    NOT NULL DEFAULT (datetime('now')),
             updated_at         TEXT    NOT NULL DEFAULT (datetime('now'))
@@ -76,6 +77,13 @@ def init_db():
         )
 
     conn.commit()
+
+    # Migration: add upcoming_days column to doctors if it doesn't exist yet
+    existing_cols = [row[1] for row in c.execute('PRAGMA table_info(doctors)').fetchall()]
+    if 'upcoming_days' not in existing_cols:
+        c.execute('ALTER TABLE doctors ADD COLUMN upcoming_days INTEGER NOT NULL DEFAULT 15')
+        conn.commit()
+
     conn.close()
 
 
@@ -106,26 +114,26 @@ def get_doctor(doctor_id):
     return dict(doctor) if doctor else None
 
 
-def add_doctor(name, availabilities_url, booking_url, move_booking_url=None):
+def add_doctor(name, availabilities_url, booking_url, move_booking_url=None, upcoming_days=15):
     conn = get_connection()
     conn.execute(
-        '''INSERT INTO doctors (name, availabilities_url, booking_url, move_booking_url)
-           VALUES (?, ?, ?, ?)''',
-        (name, availabilities_url, booking_url, move_booking_url or None)
+        '''INSERT INTO doctors (name, availabilities_url, booking_url, move_booking_url, upcoming_days)
+           VALUES (?, ?, ?, ?, ?)''',
+        (name, availabilities_url, booking_url, move_booking_url or None, upcoming_days)
     )
     conn.commit()
     conn.close()
 
 
-def update_doctor(doctor_id, name, availabilities_url, booking_url, active):
+def update_doctor(doctor_id, name, availabilities_url, booking_url, active, upcoming_days=15):
     conn = get_connection()
     conn.execute(
         '''UPDATE doctors
            SET name = ?, availabilities_url = ?, booking_url = ?,
-               active = ?, updated_at = ?
+               active = ?, upcoming_days = ?, updated_at = ?
            WHERE id = ?''',
         (name, availabilities_url, booking_url,
-         1 if active else 0, datetime.now().isoformat(), doctor_id)
+         1 if active else 0, upcoming_days, datetime.now().isoformat(), doctor_id)
     )
     conn.commit()
     conn.close()

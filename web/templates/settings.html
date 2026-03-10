@@ -39,14 +39,6 @@
         </h3>
 
         <div class="form-group">
-            <label for="upcoming_days">Tage vorausschauen</label>
-            <input type="number" id="upcoming_days" name="upcoming_days"
-                   value="{{ settings.upcoming_days | default('15') }}"
-                   min="1" max="365">
-            <div class="form-hint">Wie viele Tage in die Zukunft sollen als "frühzeitig" gelten? (API-Limit: 15 Tage für die Abfrage, Logik unbegrenzt)</div>
-        </div>
-
-        <div class="form-group">
             <label for="interval_minutes">Check-Intervall (Minuten)</label>
             <input type="number" id="interval_minutes" name="interval_minutes"
                    value="{{ settings.interval_minutes | default('5') }}"

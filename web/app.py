@@ -122,7 +122,7 @@ def send_telegram_message(token, chat_id, message):
         return False, str(e)
 
 
-def build_and_send_telegram(results, upcoming_days):
+def build_and_send_telegram(results, upcoming_days=15):
     """Build a Telegram message from check results and send it. Returns (sent, error)."""
     settings = db.get_settings()
     token   = settings.get('telegram_bot_token') or os.getenv('TELEGRAM_BOT_TOKEN', '')
@@ -148,6 +148,7 @@ def build_and_send_telegram(results, upcoming_days):
     for r in available:
         doctor = r['doctor']
         slots  = r['slots_total']
+        days   = r.get('upcoming_days', upcoming_days)
         urgency = '\U0001f534 Kurzfristig' if r.get('earlier_slots') else '\U0001f7e1 Verf\u00fcgbar'
         slot_word = f'{slots} freier Termin' if slots == 1 else f'{slots} freie Termine'
         # M-4: sanitize booking_url before embedding in Telegram HTML
@@ -155,7 +156,7 @@ def build_and_send_telegram(results, upcoming_days):
 
         message += (
             f'{urgency} \u00b7 <b>{doctor["name"]}</b>\n'
-            f'\U0001f4c5 {slot_word} in den n\u00e4chsten {upcoming_days} Tagen\n'
+            f'\U0001f4c5 {slot_word} in den n\u00e4chsten {days} Tagen\n'
             f'\U0001f449 <a href="{safe_url}">Jetzt buchen</a>\n\n'
         )
 
@@ -266,13 +267,18 @@ def add_doctor():
         name               = request.form.get('name', '').strip()
         availabilities_url = request.form.get('availabilities_url', '').strip()
         booking_url        = request.form.get('booking_url', '').strip()
+        try:
+            upcoming_days = int(request.form.get('upcoming_days', '15'))
+        except ValueError:
+            upcoming_days = 15
+        upcoming_days = max(0, min(15, upcoming_days))
 
         err = _validate_doctor_form(name, availabilities_url, booking_url)
         if err:
             flash(err, 'error')
         else:
-            db.add_doctor(name, availabilities_url, booking_url)
-            flash(f'Arzt "{name}" wurde hinzugef\u00fcgt', 'success')
+            db.add_doctor(name, availabilities_url, booking_url, upcoming_days=upcoming_days)
+            flash(f'Arzt "{name}" wurde hinzugefügt', 'success')
             return redirect(url_for('doctors'))
 
     return render_template('doctor_form.html', doctor=None, action='add')
@@ -292,12 +298,17 @@ def edit_doctor(doctor_id):
         availabilities_url = request.form.get('availabilities_url', '').strip()
         booking_url        = request.form.get('booking_url', '').strip()
         active             = request.form.get('active') == 'on'
+        try:
+            upcoming_days = int(request.form.get('upcoming_days', '15'))
+        except ValueError:
+            upcoming_days = 15
+        upcoming_days = max(0, min(15, upcoming_days))
 
         err = _validate_doctor_form(name, availabilities_url, booking_url)
         if err:
             flash(err, 'error')
         else:
-            db.update_doctor(doctor_id, name, availabilities_url, booking_url, active)
+            db.update_doctor(doctor_id, name, availabilities_url, booking_url, active, upcoming_days)
             flash(f'Arzt "{name}" wurde aktualisiert', 'success')
             return redirect(url_for('doctors'))
 
@@ -311,8 +322,27 @@ def delete_doctor(doctor_id):
     doctor = db.get_doctor(doctor_id)
     if doctor:
         db.delete_doctor(doctor_id)
-        flash(f'Arzt "{doctor["name"]}" wurde gel\u00f6scht', 'success')
+        flash(f'Arzt "{doctor["name"]}" wurde gelöscht', 'success')
     return redirect(url_for('doctors'))
+
+
+@app.route('/doctors/<int:doctor_id>/toggle', methods=['POST'])
+@login_required
+@csrf_protect
+def toggle_doctor(doctor_id):
+    doctor = db.get_doctor(doctor_id)
+    if not doctor:
+        return jsonify({'error': 'Arzt nicht gefunden'}), 404
+    new_active = not bool(doctor['active'])
+    db.update_doctor(
+        doctor_id,
+        doctor['name'],
+        doctor['availabilities_url'],
+        doctor['booking_url'],
+        new_active,
+        doctor.get('upcoming_days', 15),
+    )
+    return jsonify({'active': new_active})
 
 
 @app.route('/doctors/<int:doctor_id>/test', methods=['POST'])
@@ -325,10 +355,11 @@ def test_doctor(doctor_id):
 
     settings = db.get_settings()
     try:
-        upcoming_days = int(settings.get('upcoming_days', '15'))
+        default_days = int(settings.get('upcoming_days', '15'))
     except ValueError:
-        upcoming_days = 15
+        default_days = 15
 
+    upcoming_days = int(doctor['upcoming_days']) if doctor.get('upcoming_days') is not None else default_days
     result = run_check(doctor, upcoming_days)
 
     status = 'success' if result['success'] else 'error'
@@ -360,13 +391,15 @@ def run_test():
     """Trigger a full check run, log results and send Telegram if slots found."""
     settings = db.get_settings()
     try:
-        upcoming_days = int(settings.get('upcoming_days', '15'))
+        default_days = int(settings.get('upcoming_days', '15'))
     except ValueError:
-        upcoming_days = 15
+        default_days = 15
 
     doctors = db.get_active_doctors()
     results = []
     for doctor in doctors:
+        raw_days = doctor.get('upcoming_days')
+        upcoming_days = int(raw_days) if raw_days is not None else default_days
         result = run_check(doctor, upcoming_days)
         status = 'success' if result['success'] else 'error'
         slots  = result.get('slots_total', 0)
@@ -374,7 +407,7 @@ def run_test():
         db.add_log(doctor['name'], slots, status, msg)
         results.append(result)
 
-    tg_sent, tg_error = build_and_send_telegram(results, upcoming_days)
+    tg_sent, tg_error = build_and_send_telegram(results)
 
     return jsonify({
         'results': [{

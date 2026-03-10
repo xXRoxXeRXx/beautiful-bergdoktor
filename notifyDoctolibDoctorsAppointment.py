@@ -91,11 +91,11 @@ def main():
     telegram_chat_id = settings.get('telegram_chat_id')   or os.getenv('TELEGRAM_CHAT_ID', '')
 
     try:
-        upcoming_days = int(settings.get('upcoming_days') or os.getenv('UPCOMING_DAYS', '15'))
-        if upcoming_days < 1:
-            upcoming_days = 15
+        default_days = int(settings.get('upcoming_days') or os.getenv('UPCOMING_DAYS', '15'))
+        if default_days < 0:
+            default_days = 15
     except ValueError:
-        upcoming_days = 15
+        default_days = 15
 
     doctors = db.get_active_doctors()
     if not doctors:
@@ -114,6 +114,8 @@ def main():
     results = []
     for doctor in doctors:
         log(f"Checking {doctor['name']}...")
+        raw_days = doctor.get('upcoming_days')
+        upcoming_days = int(raw_days) if raw_days is not None else default_days
         result = run_check(doctor, upcoming_days)
         results.append(result)
 
@@ -151,6 +153,7 @@ def main():
     for result in available_doctors:
         doctor = result['doctor']
         slots  = result['slots_total']
+        days   = result.get('upcoming_days', default_days)
         urgency = '🔴 Kurzfristig' if result['earlier_slots'] else '🟡 Verfügbar'
         slot_word = f'{slots} freier Termin' if slots == 1 else f'{slots} freie Termine'
         # M-4: sanitize booking_url before embedding in Telegram HTML
@@ -158,7 +161,7 @@ def main():
 
         message += (
             f'{urgency} · <b>{doctor["name"]}</b>\n'
-            f'📅 {slot_word} in den nächsten {upcoming_days} Tagen\n'
+            f'📅 {slot_word} in den nächsten {days} Tagen\n'
             f'👉 <a href="{safe_url}">Jetzt buchen</a>\n\n'
         )
 

@@ -41,6 +41,10 @@
             <td style="text-align:right;">
                 <div style="display:flex; gap:0.5rem; justify-content:flex-end;">
                     <button class="btn btn-ghost btn-sm" onclick="testDoctor({{ doctor.id }}, this)">🧪 Test</button>
+                    <button class="btn btn-ghost btn-sm" id="toggle-btn-{{ doctor.id }}"
+                            onclick="toggleDoctor({{ doctor.id }}, this)">
+                        {{ '⏸️ Pause' if doctor.active else '▶️ Aktivieren' }}
+                    </button>
                     <a href="{{ url_for('edit_doctor', doctor_id=doctor.id) }}" class="btn btn-ghost btn-sm">✏️ Edit</a>
                     <form method="POST" action="{{ url_for('delete_doctor', doctor_id=doctor.id) }}"
                           onsubmit="return confirm('Arzt &quot;{{ doctor.name }}&quot; wirklich löschen?')">
@@ -65,6 +69,29 @@
 {% endif %}
 
 <script>
+const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+
+async function toggleDoctor(id, btn) {
+    btn.disabled = true;
+    const res = await fetch(`/doctors/${id}/toggle`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: `csrf_token=${encodeURIComponent(csrfToken)}`,
+    });
+    if (res.ok) {
+        const data = await res.json();
+        const isActive = data.active;
+        // Button-Text aktualisieren
+        btn.textContent = isActive ? '⏸️ Pause' : '▶️ Aktivieren';
+        // Status-Badge aktualisieren
+        const row = btn.closest('tr');
+        const badge = row.querySelector('.badge');
+        badge.className = isActive ? 'badge badge-green' : 'badge badge-gray';
+        badge.textContent = isActive ? '● Aktiv' : '○ Inaktiv';
+    }
+    btn.disabled = false;
+}
+
 async function testDoctor(id, btn) {
     const resultDiv = document.getElementById('result-' + id);
     const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');

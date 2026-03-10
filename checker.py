@@ -60,7 +60,6 @@ def run_check(doctor: dict, upcoming_days: int) -> dict:
         dict with keys: doctor, slots_total, slots_exist, earlier_slots,
                         availabilities, success, [error]
     """
-    max_datetime_in_future = datetime.today() + timedelta(days=upcoming_days)
     doctor_name = doctor.get('name', '?')
 
     try:
@@ -72,7 +71,7 @@ def run_check(doctor: dict, upcoming_days: int) -> dict:
         url_parts = urllib.parse.urlparse(avail_url)
         query = dict(urllib.parse.parse_qsl(url_parts.query))
         query.update({
-            'limit': min(upcoming_days, DOCTOLIB_MAX_LIMIT),
+            'limit': DOCTOLIB_MAX_LIMIT,
             'start_date': date.today(),
         })
         url = url_parts._replace(query=urllib.parse.urlencode(query)).geturl()
@@ -119,24 +118,34 @@ def run_check(doctor: dict, upcoming_days: int) -> dict:
             return {'doctor': doctor, 'success': False, 'error': user_msg}
 
         slots_total = availabilities['total']
-        slots_exist = slots_total > 0
 
+        # Filter slots to only those within the doctor's configured upcoming_days window.
+        # upcoming_days=0 means "today only"; otherwise slots up to N days from now qualify.
+        today = datetime.today().date()
+        if upcoming_days == 0:
+            cutoff_date = today
+        else:
+            cutoff_date = today + timedelta(days=upcoming_days)
+
+        slots_in_window = 0
         earlier_slots = False
-        if slots_exist:
-            for day in availabilities['availabilities']:
-                if not day['slots']:
-                    continue
-                next_dt = datetime.fromisoformat(day['date']).replace(tzinfo=None)
-                if next_dt < max_datetime_in_future:
-                    earlier_slots = True
-                    break
+        for day in availabilities['availabilities']:
+            if not day['slots']:
+                continue
+            slot_date = datetime.fromisoformat(day['date']).date()
+            if slot_date <= cutoff_date:
+                slots_in_window += len(day['slots'])
+                earlier_slots = True
+
+        slots_exist = slots_in_window > 0
 
         return {
             'doctor':         doctor,
-            'slots_total':    slots_total,
+            'slots_total':    slots_in_window,
             'slots_exist':    slots_exist,
             'earlier_slots':  earlier_slots,
             'availabilities': availabilities,
+            'upcoming_days':  upcoming_days,
             'success':        True,
         }
 

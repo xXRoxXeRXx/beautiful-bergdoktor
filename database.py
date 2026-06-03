@@ -19,6 +19,7 @@ _ALLOWED_SETTINGS = frozenset({
     'upcoming_days',
     'notify_hourly',
     'interval_minutes',
+    'notify_only_new',
 })
 
 
@@ -60,6 +61,13 @@ def init_db():
             value      TEXT NOT NULL DEFAULT '',
             updated_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
+        CREATE TABLE IF NOT EXISTS notified_slots (
+            doctor_key TEXT NOT NULL,
+            slot_key   TEXT NOT NULL,
+            slot_date  TEXT,
+            first_seen TEXT NOT NULL DEFAULT (datetime('now')),
+            PRIMARY KEY (doctor_key, slot_key)
+        );
     ''')
 
     # Seed default settings (won't overwrite existing values)
@@ -69,6 +77,7 @@ def init_db():
         'upcoming_days':      '15',
         'notify_hourly':      'false',
         'interval_minutes':   '5',
+        'notify_only_new':    'true',
     }
     for key, value in defaults.items():
         c.execute(
@@ -195,5 +204,43 @@ def save_settings(data: dict):
                updated_at = excluded.updated_at''',
             (key, value, datetime.now().isoformat())
         )
+    conn.commit()
+    conn.close()
+
+# ── Notified Slots (Deduplizierung) ──────────────────────────────────────────
+
+def get_notified_slot_keys(doctor_key):
+    """Bereits gemeldete Slot-Schlüssel für einen Arzt zurückgeben."""
+    conn = get_connection()
+    rows = conn.execute(
+        'SELECT slot_key FROM notified_slots WHERE doctor_key = ?',
+        (str(doctor_key),)
+    ).fetchall()
+    conn.close()
+    return {r['slot_key'] for r in rows}
+
+def add_notified_slots(doctor_key, entries):
+    """Slots als gemeldet markieren. entries: Iterable aus (slot_key, slot_date)."""
+    conn = get_connection()
+    conn.executemany(
+        '''INSERT OR IGNORE INTO notified_slots (doctor_key, slot_key, slot_date)
+           VALUES (?, ?, ?)''',
+        [(str(doctor_key), key, sdate) for key, sdate in entries]
+    )
+    conn.commit()
+    conn.close()
+
+def cleanup_expired_slots():
+    """Gemeldete Slots löschen, deren Datum in der Vergangenheit liegt."""
+    today = datetime.now().date().isoformat()
+    conn = get_connection()
+    conn.execute('DELETE FROM notified_slots WHERE slot_date < ?', (today,))
+    conn.commit()
+    conn.close()
+
+def clear_notified_slots():
+    """Alle gemerkten Slots vergessen (z. B. zum Testen / Zurücksetzen)."""
+    conn = get_connection()
+    conn.execute('DELETE FROM notified_slots')
     conn.commit()
     conn.close()
